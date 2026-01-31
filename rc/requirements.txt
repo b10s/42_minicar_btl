@@ -1,0 +1,7 @@
+Adafruit-Blinka>=8.0
+adafruit-circuitpython-icm20x>=1.1
+adafruit-circuitpython-mpu6050>=1.2
+adafruit-circuitpython-pca9685>=3.4
+aiohttp>=3.10,<4.0
+RPi.GPIO>=0.7.1
+pyserial>=3.5
