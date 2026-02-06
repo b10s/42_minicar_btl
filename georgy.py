@@ -2,6 +2,7 @@ import board
 import busio
 from adafruit_pca9685 import PCA9685
 from config import Config
+from pca9685 import Actuators
 import serial
 import time
 import math
