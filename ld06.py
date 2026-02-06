@@ -1,20 +1,6 @@
 import serial
 import time
 
-# LDROBOT LD06 common frame:
-# Header: 0x54 0x2C
-# Total length: 47 bytes
-# [0]  0x54
-# [1]  0x2C
-# [2:4] speed (uint16)
-# [4:6] start_angle (uint16, 0.01 deg)
-# [6:42] 12 points * 3 bytes: dist(uint16 mm) + intensity(uint8)
-# [42:44] end_angle (uint16, 0.01 deg)
-# [44:46] timestamp (uint16)
-# [46] crc8
-#
-# If your device uses a different format, we adjust here.
-
 CRC8_TABLE = [
     0x00,0x4d,0x9a,0xd7,0x79,0x34,0xe3,0xae,0xf2,0xbf,0x68,0x25,0x8b,0xc6,0x11,0x5c,
     0xa9,0xe4,0x33,0x7e,0xd0,0x9d,0x4a,0x07,0x5b,0x16,0xc1,0x8c,0x22,0x6f,0xb8,0xf5,
@@ -34,13 +20,11 @@ CRC8_TABLE = [
     0xf4,0xb9,0x6e,0x23,0x8d,0xc0,0x17,0x5a,0x06,0x4b,0x9c,0xd1,0x7f,0x32,0xe5,0xa8
 ]
 
-
 def crc8(data: bytes) -> int:
     c = 0
     for b in data:
         c = CRC8_TABLE[(c ^ b) & 0xFF]
-    return c & 0xFF
-
+    return c
 
 class LD06:
     FRAME_LEN = 47
@@ -152,7 +136,6 @@ class LD06:
                 break
         scan.sort(key=lambda x: x[0])
         return scan
-
 
 if __name__ == "__main__":
     lidar = LD06("/dev/ttyS0", 230400)

@@ -68,7 +68,8 @@ def circle_from_3pts(p1, p2, p3):
 def calculatesteer(data):
     data = roi(data)
     xy_data = convert(data)
-    xy_data = kdfilter(np.array(xy_data))
+    if len(xy_data) < 3:
+        return 0.0
     xy_data = kdfilter(np.array(xy_data), 0.1, 2)
     p1_ind, p2_ind = neighbormaxdiff_ind(xy_data) 
     p3 = [(xy_data[p1_ind][0] + xy_data[p2_ind][0])/2, 
@@ -80,13 +81,12 @@ def calculatesteer(data):
        steer = -steer 
     return steer
 
-if __name__ == "main":
+if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     from matplotlib.patches import Circle
     from matplotlib.patches import Arc
-
     frames = []
     p12 = []
     steer = [] 

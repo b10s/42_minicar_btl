@@ -27,10 +27,10 @@ if __name__ == "__main__":
     try:
         while True:
             scan = lidar.read_scan()
-            pts = scan_to_xy(scan)
-            decision = left_right_gap_decision_py(pts)
             act.set_esc_us(steer_to_us(cfg, -0.075))
-            act.set_servo_us(steer_to_us(cfg, calculatesteer(scan)))
+            steer = calculatesteer(scan)
+            print(steer)
+            act.set_servo_us(steer_to_us(cfg, steer))
 
     except KeyboardInterrupt:
         pass
