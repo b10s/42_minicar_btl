@@ -48,8 +48,10 @@ class LD06:
     H1 = 0x2C
 
     def __init__(self, port: str, baud: int):
-        self.ser = serial.Serial(port, baudrate=baud, timeout=0.2)
+        self.ser = serial.Serial(port, baudrate=baud, timeout=0.4)
         self.offset_deg: float = 0.0
+        self.frames_ok = 0
+        self.frames_crc_fail = 0
 
     def close(self):
         try:
@@ -75,7 +77,9 @@ class LD06:
                 return None
             frame = bytes([self.H0, self.H1]) + rest
             if crc8(frame[:-1]) != frame[-1]:
+                self.frames_crc_fail += 1
                 continue
+            self.frames_ok += 1
             return frame
 
     def _parse_frame(self, frame: bytes) -> list[tuple[float, float]]:
@@ -106,15 +110,45 @@ class LD06:
             out.append((a, d_m))
         return out
 
-    def read_scan(self, max_frames: int = 30) -> list[tuple[float, float]]:
+    def read_scan(self, max_frames: int = 60, span_deg: float = 360.0) -> list[tuple[float, float]]:
         scan: list[tuple[float, float]] = []
         t0 = time.time()
+        last_ang = None
+        total_span = 0.0
+        min_ang = None
+        max_ang = None
+        wrapped = False
+        use_wrap = span_deg >= 360.0
         for _ in range(max_frames):
             fr = self._read_frame()
             if fr is None:
                 break
-            scan.extend(self._parse_frame(fr))
-            if time.time() - t0 > 0.08 and len(scan) > 150:
+            pts = self._parse_frame(fr)
+            for a, d in pts:
+                if last_ang is None:
+                    last_ang = a
+                else:
+                    delta = a - last_ang
+                    if delta < -180.0:
+                        delta += 360.0
+                        if use_wrap:
+                            wrapped = True
+                    elif delta > 180.0:
+                        delta -= 360.0
+                        if use_wrap:
+                            wrapped = True
+                    total_span += delta
+                    last_ang = a
+                min_ang = a if min_ang is None else min(min_ang, a)
+                max_ang = a if max_ang is None else max(max_ang, a)
+                scan.append((a, d))
+                if use_wrap and wrapped:
+                    break
+                if abs(total_span) >= span_deg:
+                    break
+            if use_wrap and wrapped:
+                break
+            if time.time() - t0 > 0.10 and len(scan) > 150:
                 break
         scan.sort(key=lambda x: x[0])
         return scan
