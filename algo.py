@@ -1,9 +1,5 @@
 import json
 import math
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from matplotlib.patches import Circle
-from matplotlib.patches import Arc
 
 import numpy as np
 from scipy.spatial import KDTree
@@ -84,74 +80,80 @@ def calculatesteer(data):
        steer = -steer 
     return steer
 
+if __name__ == "main":
 
-frames = []
-p12 = []
-steer = [] 
-with open("cw.jsonl") as f:
-    for line in f:
-        data = json.loads(line)
-        data_bck = list(data["scan"])
-        data = roi(data["scan"])
-        xy_data = convert(data)
-        xy_data = kdfilter(np.array(xy_data))
-        xy_data = kdfilter(np.array(xy_data), 0.1, 2)
-        p1_ind, p2_ind = neighbormaxdiff_ind(xy_data)
-        
-        p3 = [(xy_data[p1_ind][0] + xy_data[p2_ind][0])/2, 
-                (xy_data[p1_ind][1] + xy_data[p2_ind][1])/2]
-        p = [p3, [-front_to_back_wheel-lidar_to_front_wheel, 0], [-lidar_to_front_wheel, 0]]
-        p12.append(p)
-        steer.append(calculatesteer(data_bck)) 
-        frames.append(xy_data)
-        
-fig, ax = plt.subplots()
-sc = ax.scatter([], [], s=5)
-sc_red = ax.scatter([], [], s=20, c="red")
-ax.set_aspect("equal")
-ax.set_xlim(-5, 5)
-ax.set_ylim(-5, 5)
-ax.grid(True)
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+    from matplotlib.patches import Circle
+    from matplotlib.patches import Arc
 
-def on_key(event):
-    global frame_idx
-    if event.key == "right":
-        frame_idx = (frame_idx + 1) % len(frames)
-    elif event.key == "left":
-        frame_idx = (frame_idx - 1) % len(frames)
+    frames = []
+    p12 = []
+    steer = [] 
+    with open("cw.jsonl") as f:
+        for line in f:
+            data = json.loads(line)
+            data_bck = list(data["scan"])
+            data = roi(data["scan"])
+            xy_data = convert(data)
+            xy_data = kdfilter(np.array(xy_data))
+            xy_data = kdfilter(np.array(xy_data), 0.1, 2)
+            p1_ind, p2_ind = neighbormaxdiff_ind(xy_data)
+            
+            p3 = [(xy_data[p1_ind][0] + xy_data[p2_ind][0])/2, 
+                    (xy_data[p1_ind][1] + xy_data[p2_ind][1])/2]
+            p = [p3, [-front_to_back_wheel-lidar_to_front_wheel, 0], [-lidar_to_front_wheel, 0]]
+            p12.append(p)
+            steer.append(calculatesteer(data_bck)) 
+            frames.append(xy_data)
+            
+    fig, ax = plt.subplots()
+    sc = ax.scatter([], [], s=5)
+    sc_red = ax.scatter([], [], s=20, c="red")
+    ax.set_aspect("equal")
+    ax.set_xlim(-5, 5)
+    ax.set_ylim(-5, 5)
+    ax.grid(True)
+
+    def on_key(event):
+        global frame_idx
+        if event.key == "right":
+            frame_idx = (frame_idx + 1) % len(frames)
+        elif event.key == "left":
+            frame_idx = (frame_idx - 1) % len(frames)
+        update()
+
+    frame_idx = 0
+    def update(i=None):
+        sc.set_offsets(frames[frame_idx] )
+        sc_red.set_offsets(p12[frame_idx])
+        s = steer[frame_idx] / math.pi * 180
+        ax.set_title(f"Frame {frame_idx}, steer = {s:.2}°")
+        ax.patches.clear()
+        ux, uy, r = circle_from_3pts(p12[frame_idx][0], p12[frame_idx][1], p12[frame_idx][2])
+        p1, p2 = p12[frame_idx][0], p12[frame_idx][1]
+        ux, uy, r = circle_from_3pts(p12[frame_idx][0], p12[frame_idx][1], p12[frame_idx][2])
+        
+        a1 = math.degrees(math.atan2(p1[1] - uy, p1[0] - ux))
+        a2 = math.degrees(math.atan2(p2[1] - uy, p2[0] - ux))
+        a1 = (a1 + 360) % 360
+        a2 = (a2 + 360) % 360
+        if (a2 - a1) % 360 > 180:
+            a1, a2 = a2, a1
+        arc = Arc(
+            (ux, uy),
+            2 * r,
+            2 * r,
+            angle=0,
+            theta1=a1,
+            theta2=a2,
+            color="green",
+            linewidth=2
+        )
+        ax.add_patch(arc)
+        fig.canvas.draw_idle()
+        return sc,
+
+    fig.canvas.mpl_connect("key_press_event", on_key)
     update()
-
-frame_idx = 0
-def update(i=None):
-    sc.set_offsets(frames[frame_idx] )
-    sc_red.set_offsets(p12[frame_idx])
-    s = steer[frame_idx] / math.pi * 180
-    ax.set_title(f"Frame {frame_idx}, steer = {s:.2}°")
-    ax.patches.clear()
-    ux, uy, r = circle_from_3pts(p12[frame_idx][0], p12[frame_idx][1], p12[frame_idx][2])
-    p1, p2 = p12[frame_idx][0], p12[frame_idx][1]
-    ux, uy, r = circle_from_3pts(p12[frame_idx][0], p12[frame_idx][1], p12[frame_idx][2])
-    
-    a1 = math.degrees(math.atan2(p1[1] - uy, p1[0] - ux))
-    a2 = math.degrees(math.atan2(p2[1] - uy, p2[0] - ux))
-    a1 = (a1 + 360) % 360
-    a2 = (a2 + 360) % 360
-    if (a2 - a1) % 360 > 180:
-        a1, a2 = a2, a1
-    arc = Arc(
-        (ux, uy),
-        2 * r,
-        2 * r,
-        angle=0,
-        theta1=a1,
-        theta2=a2,
-        color="green",
-        linewidth=2
-    )
-    ax.add_patch(arc)
-    fig.canvas.draw_idle()
-    return sc,
-
-fig.canvas.mpl_connect("key_press_event", on_key)
-update()
-plt.show()
+    plt.show()
