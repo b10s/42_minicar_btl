@@ -4,8 +4,8 @@ import math
 import numpy as np
 from scipy.spatial import KDTree
 
-lidar_to_front_wheel = 0.08
-front_to_back_wheel = 0.257
+lidar_to_front_wheel = 0.03
+front_to_back_wheel = 0.259
 
 def kdfilter(pts, radius=0.4, min_neighbors=6):
     if len(pts) < min_neighbors:
@@ -76,7 +76,7 @@ def calculatesteer(data):
             (xy_data[p1_ind][1] + xy_data[p2_ind][1])/2]
     p = [p3, [-front_to_back_wheel-lidar_to_front_wheel, 0], [-lidar_to_front_wheel, 0]]
     ux, uy, r = circle_from_3pts(p[0], p[1], p[2])
-    steer = front_to_back_wheel / r  
+    steer = front_to_back_wheel / r * 180.0 / math.pi  
     if uy < 0:
        steer = -steer 
     return steer
@@ -127,9 +127,22 @@ if __name__ == "__main__":
     def update(i=None):
         sc.set_offsets(frames[frame_idx] )
         sc_red.set_offsets(p12[frame_idx])
-        s = steer[frame_idx] / math.pi * 180
-        ax.set_title(f"Frame {frame_idx}, steer = {s:.2}°")
-        ax.patches.clear()
+        s = steer[frame_idx]
+        
+        ax.set_title(f"Frame {frame_idx}, steer = {s:.2} Deg")
+        
+        front_wheel_pos = p12[frame_idx][2]  # Front wheel position
+        steer_angle = math.radians(steer[frame_idx])
+        dx = math.cos(steer_angle) * 3.0
+        dy = math.sin(steer_angle) * 3.0        
+        for patch in list(ax.patches):
+            patch.remove()
+        for collection in list(ax.collections):
+            if collection not in [sc, sc_red]:
+                collection.remove()
+        ax.quiver(front_wheel_pos[0], front_wheel_pos[1], dx, dy, 
+                 angles='xy', scale_units='xy', color='orange', width=0.01, scale=1)
+        
         ux, uy, r = circle_from_3pts(p12[frame_idx][0], p12[frame_idx][1], p12[frame_idx][2])
         p1, p2 = p12[frame_idx][0], p12[frame_idx][1]
         ux, uy, r = circle_from_3pts(p12[frame_idx][0], p12[frame_idx][1], p12[frame_idx][2])
