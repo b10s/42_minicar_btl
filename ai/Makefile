@@ -1,5 +1,5 @@
 ADDRESS ?= 10.98.196.194
-REMOTE_DIR ?= /home/pi/refactor
+REMOTE_DIR ?= /home/pi/ai_common
 PYTHON ?= python
 VENV_ACTIVATE ?= .venv/bin/activate
 
