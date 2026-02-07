@@ -1,6 +1,0 @@
-numpy
-scipy
-pyserial
-adafruit-busdevice
-adafruit-pca9685
-adafruit-blinka

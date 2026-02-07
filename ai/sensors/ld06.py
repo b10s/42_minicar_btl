@@ -1,6 +1,20 @@
 import serial
 import time
 
+# LDROBOT LD06 common frame:
+# Header: 0x54 0x2C
+# Total length: 47 bytes
+# [0]  0x54
+# [1]  0x2C
+# [2:4] speed (uint16)
+# [4:6] start_angle (uint16, 0.01 deg)
+# [6:42] 12 points * 3 bytes: dist(uint16 mm) + intensity(uint8)
+# [42:44] end_angle (uint16, 0.01 deg)
+# [44:46] timestamp (uint16)
+# [46] crc8
+#
+# If your device uses a different format, we adjust here.
+
 CRC8_TABLE = [
     0x00,0x4d,0x9a,0xd7,0x79,0x34,0xe3,0xae,0xf2,0xbf,0x68,0x25,0x8b,0xc6,0x11,0x5c,
     0xa9,0xe4,0x33,0x7e,0xd0,0x9d,0x4a,0x07,0x5b,0x16,0xc1,0x8c,0x22,0x6f,0xb8,0xf5,
@@ -20,22 +34,32 @@ CRC8_TABLE = [
     0xf4,0xb9,0x6e,0x23,0x8d,0xc0,0x17,0x5a,0x06,0x4b,0x9c,0xd1,0x7f,0x32,0xe5,0xa8
 ]
 
+
 def crc8(data: bytes) -> int:
     c = 0
     for b in data:
         c = CRC8_TABLE[(c ^ b) & 0xFF]
-    return c
+    return c & 0xFF
+
 
 class LD06:
     FRAME_LEN = 47
     H0 = 0x54
     H1 = 0x2C
 
-    def __init__(self, port: str, baud: int):
+    def __init__(self, port: str, baud: int, *, offset_deg: float = 0.0):
         self.ser = serial.Serial(port, baudrate=baud, timeout=0.4)
-        self.offset_deg: float = 0.0
+        self.offset_deg: float = offset_deg
         self.frames_ok = 0
         self.frames_crc_fail = 0
+        self._buf = bytearray()
+        self._scan = []
+        self._last_ang = None
+        self._total_span = 0.0
+        self._wrapped = False
+
+    def set_nonblocking(self):
+        self.ser.timeout = 0
 
     def close(self):
         try:
@@ -137,13 +161,70 @@ class LD06:
         scan.sort(key=lambda x: x[0])
         return scan
 
+    def poll_scan(self, span_deg: float = 360.0, max_bytes: int = 4096) -> list[tuple[float, float]] | None:
+        # non-blocking: read available bytes and try to assemble frames
+        to_read = self.ser.in_waiting
+        if to_read <= 0:
+            return None
+        if to_read > max_bytes:
+            to_read = max_bytes
+        data = self.ser.read(to_read)
+        if data:
+            self._buf.extend(data)
+
+        # parse frames from buffer
+        i = 0
+        while i + self.FRAME_LEN <= len(self._buf):
+            if self._buf[i] != self.H0 or self._buf[i + 1] != self.H1:
+                i += 1
+                continue
+            frame = bytes(self._buf[i : i + self.FRAME_LEN])
+            if crc8(frame[:-1]) != frame[-1]:
+                self.frames_crc_fail += 1
+                i += 1
+                continue
+            self.frames_ok += 1
+            pts = self._parse_frame(frame)
+            for a, d in pts:
+                if self._last_ang is None:
+                    self._last_ang = a
+                else:
+                    delta = a - self._last_ang
+                    if delta < -180.0:
+                        delta += 360.0
+                        self._wrapped = True
+                    elif delta > 180.0:
+                        delta -= 360.0
+                        self._wrapped = True
+                    self._total_span += delta
+                    self._last_ang = a
+                self._scan.append((a, d))
+            i += self.FRAME_LEN
+
+            if abs(self._total_span) >= span_deg or self._wrapped:
+                out = self._scan
+                out.sort(key=lambda x: x[0])
+                self._scan = []
+                self._last_ang = None
+                self._total_span = 0.0
+                self._wrapped = False
+                # drop processed bytes and keep rest
+                self._buf = self._buf[i:]
+                return out
+
+        # drop consumed bytes
+        if i > 0:
+            self._buf = self._buf[i:]
+        return None
+
+
 if __name__ == "__main__":
     lidar = LD06("/dev/ttyS0", 230400)
     try:
         while True:
             scan = lidar.read_scan()
             print(scan)
-    except Exception as exc:
-        print(exc)
+    except KeyboardInterrupt:
+        pass
     finally:
         lidar.close()
