@@ -76,7 +76,7 @@ def calculatesteer(data):
             (xy_data[p1_ind][1] + xy_data[p2_ind][1])/2]
     p = [p3, [-front_to_back_wheel-lidar_to_front_wheel, 0], [-lidar_to_front_wheel, 0]]
     ux, uy, r = circle_from_3pts(p[0], p[1], p[2])
-    steer = front_to_back_wheel / r * 180.0 / math.pi  
+    steer = math.atan2(front_to_back_wheel, r) * 180.0 / math.pi  
     if uy < 0:
        steer = -steer 
     return steer

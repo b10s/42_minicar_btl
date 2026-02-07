@@ -11,13 +11,13 @@ def us_to_duty_cycle(us, freq_hz):
     return min(max(0, duty), 65535)
 
 class Config:
-    servo_center_us = 1500
-    servo_right_us = 2000
-    servo_left_us = 1000
+    servo_center_us = 1480
+    servo_right_us = 1720
+    servo_left_us = 1240
     
-    esc_neutral_us = 1500
-    esc_min_us: int = 1000
-    esc_max_us: int = 2000
+    esc_neutral_us = 1450
+    esc_min_us: int = 1240
+    esc_max_us: int = 1720
 
     servo_channel = 0
     esc_channel = 1
@@ -42,6 +42,7 @@ class Actuators:
     def set_servo_deg(self, deg: float):
         s = deg / self.cfg.max_steer_deg
         us = steer_to_us(self.cfg, s)
+        print(s)
         self.set_servo_us(us)
 
     def set_esc_us(self, us: int):
@@ -73,15 +74,26 @@ if __name__ == "__main__":
     try:
         prev = time.time()
         while True:
+            for i in range(-150, 150, 5):
+                time.sleep(0.1)
+                print(i)
+                act.set_servo_deg(i/10)
+            for i in range(150, -150, -5):
+                time.sleep(0.1)
+                print(i)
+                act.set_servo_deg(i/10)
+        #act.stop()
+        #exit()
+        while True:
             
             scan = lidar.read_scan()
             steer = calculatesteer(scan)
             
             if time.time() - prev > cfg.control_cycles / cfg.pca9685_freq_hz:
-                print(steer)
-                act.set_esc_us(steer_to_us(cfg, -0.075))
+                #print(steer)
+                act.set_esc_us(1439)
                 prev = time.time()
-                act.set_servo_deg(steer)
+                act.set_servo_deg(-steer)
 
     except KeyboardInterrupt:
         pass
