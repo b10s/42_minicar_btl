@@ -1,6 +1,5 @@
 import busio
 import board
-import math
 import time
 from adafruit_pca9685 import PCA9685
 from ld06 import LD06
