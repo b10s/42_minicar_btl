@@ -1,6 +1,7 @@
 import busio
 import board
 import math
+import time
 from adafruit_pca9685 import PCA9685
 from ld06 import LD06
 from algo import calculatesteer
@@ -34,6 +35,7 @@ class Actuators:
         i2c = busio.I2C(board.SCL, board.SDA)
         self.pca = PCA9685(i2c, address=cfg.pca9685_address)
         self.pca.frequency = cfg.pca9685_freq_hz
+        self.stop()
 
     def set_servo_us(self, us: int):
         duty = us_to_duty_cycle(us, self.cfg.pca9685_freq_hz)
@@ -63,36 +65,31 @@ def steer_to_us(cfg, s):
         return int(cfg.servo_center_us + s * (cfg.servo_right_us - cfg.servo_center_us))
     return int(cfg.servo_center_us + s * (cfg.servo_center_us - cfg.servo_left_us))
 
-import time
-
 if __name__ == "__main__":
     cfg = Config()
     act = Actuators(cfg)
     lidar = LD06("/dev/ttyS0", 230400)
-    act.stop()
-
     try:
-        prev = time.time()
+        input("Press Enter to drive...")
+        print("Driving.")
+        prevtime = time.time()
+        prevsteer = 0
+        steer = 0
+        intsteer = 0
+        P = 1.2
+        D = 0.2
+        I = 0.001
         while True:
-            for i in range(-150, 150, 5):
-                time.sleep(0.1)
-                print(i)
-                act.set_servo_deg(i/10)
-            for i in range(150, -150, -5):
-                time.sleep(0.1)
-                print(i)
-                act.set_servo_deg(i/10)
-        #act.stop()
-        #exit()
-        while True:
-            
             scan = lidar.read_scan()
-            steer = calculatesteer(scan)
-            
-            if time.time() - prev > cfg.control_cycles / cfg.pca9685_freq_hz:
-                #print(steer)
-                act.set_esc_us(1439)
-                prev = time.time()
+            prevsteer = steer
+            calculate_steer = calculatesteer(scan)
+            intsteer += calculate_steer - prevsteer
+            steer = (calculate_steer - prevsteer) * D + calculate_steer * P + I * intsteer
+            if abs(steer) >= cfg.max_steer_deg:
+                intsteer = 0
+            if time.time() - prevtime > cfg.control_cycles / cfg.pca9685_freq_hz:
+                act.set_esc_us(1460)
+                prevtime = time.time()
                 act.set_servo_deg(-steer)
 
     except KeyboardInterrupt:
