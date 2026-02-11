@@ -11,16 +11,16 @@ def us_to_duty_cycle(us, freq_hz):
     return min(max(0, duty), 65535)
 
 class Config:
-    servo_center_us = 1480
-    servo_right_us = 1720
-    servo_left_us = 1240
+    servo_center_us = 1470
+    servo_right_us = 1760
+    servo_left_us = 1270
     
-    esc_neutral_us = 1450
-    esc_min_us: int = 1240
-    esc_max_us: int = 1720
+    esc_neutral_us = 1500
+    esc_min_us: int = 1000
+    esc_max_us: int = 2000
 
-    servo_channel = 0
-    esc_channel = 1
+    servo_channel = 1
+    esc_channel = 0
     pca9685_address = 0x40
     pca9685_freq_hz = 58
     max_steer_deg = 15
@@ -71,6 +71,8 @@ if __name__ == "__main__":
     try:
         input("Press Enter to drive...")
         print("Driving.")
+        act.set_esc_us(1479)
+                
         prevtime = time.time()
         prevsteer = 0
         steer = 0
@@ -85,12 +87,11 @@ if __name__ == "__main__":
             intsteer += calculate_steer - prevsteer
             steer = (calculate_steer - prevsteer) * D + calculate_steer * P + I * intsteer
             if abs(steer) >= cfg.max_steer_deg:
-                intsteer = 0
+                intsteer = 0.0
             if time.time() - prevtime > cfg.control_cycles / cfg.pca9685_freq_hz:
                 act.set_esc_us(1460)
                 prevtime = time.time()
                 act.set_servo_deg(-steer)
-
     except KeyboardInterrupt:
         pass
     finally:

@@ -21,10 +21,7 @@ def kdfilter(pts, radius=0.4, min_neighbors=6):
 def roi(data, anglelim = 70, rclose = 0.2, rfar = 5):
     dataout = []
     for angle_deg, r in data:
-        if angle_deg > 360 - anglelim and r and r > rclose and r < rfar:
-            dataout.append((angle_deg - 360, r))    
-    for angle_deg, r in data:
-        if angle_deg < anglelim and r and r > rclose and r < rfar:
+        if angle_deg > 90 - anglelim and angle_deg < anglelim  + 90 and r and r > rclose and r < rfar:
             dataout.append((angle_deg, r))
     dataout.sort(key = lambda x : x[0])
     return dataout
