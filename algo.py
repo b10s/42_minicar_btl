@@ -14,7 +14,7 @@ def kdfilter(pts, radius=0.4, min_neighbors=6):
     mask = np.zeros(len(pts), dtype=bool)
     for i, p in enumerate(pts):
         idxs = tree.query_ball_point(p, r=radius)
-        if len(idxs) - 1 >= min_neighbors:  # exclude self
+        if len(idxs) - 1 >= min_neighbors:
             mask[i] = True
     return pts[mask]
 
@@ -22,7 +22,7 @@ def roi(data, anglelim = 70, rclose = 0.2, rfar = 5):
     dataout = []
     for angle_deg, r in data:
         if angle_deg > 90 - anglelim and angle_deg < anglelim  + 90 and r and r > rclose and r < rfar:
-            dataout.append((angle_deg, r))
+            dataout.append((180 - angle_deg, r))
     dataout.sort(key = lambda x : x[0])
     return dataout
 

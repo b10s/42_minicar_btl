@@ -1,6 +1,5 @@
 import serial
 import time
-
 CRC8_TABLE = [
     0x00,0x4d,0x9a,0xd7,0x79,0x34,0xe3,0xae,0xf2,0xbf,0x68,0x25,0x8b,0xc6,0x11,0x5c,
     0xa9,0xe4,0x33,0x7e,0xd0,0x9d,0x4a,0x07,0x5b,0x16,0xc1,0x8c,0x22,0x6f,0xb8,0xf5,
@@ -20,22 +19,27 @@ CRC8_TABLE = [
     0xf4,0xb9,0x6e,0x23,0x8d,0xc0,0x17,0x5a,0x06,0x4b,0x9c,0xd1,0x7f,0x32,0xe5,0xa8
 ]
 
+
 def crc8(data: bytes) -> int:
     c = 0
     for b in data:
         c = CRC8_TABLE[(c ^ b) & 0xFF]
-    return c
+    return c & 0xFF
+
 
 class LD06:
     FRAME_LEN = 47
     H0 = 0x54
     H1 = 0x2C
 
-    def __init__(self, port: str, baud: int):
-        self.ser = serial.Serial(port, baudrate=baud, timeout=0.4)
-        self.offset_deg: float = 0.0
-        self.frames_ok = 0
-        self.frames_crc_fail = 0
+    def __init__(self, port: str, baud: int, *, offset_deg: float = 0.0, sync_to_zero: bool = False):
+        self.ser = serial.Serial(port, baudrate=baud, timeout=0.2)
+        self.offset_deg: float = offset_deg
+        self.sync_to_zero = sync_to_zero
+        self._sync_frame: bytes | None = None
+
+    def set_nonblocking(self):
+        self.ser.timeout = 0
 
     def close(self):
         try:
@@ -44,26 +48,27 @@ class LD06:
             pass
 
     def _read_frame(self) -> bytes | None:
-        # sync to header
         while True:
             b = self.ser.read(1)
             if not b:
                 return None
             if b[0] != self.H0:
                 continue
+
             b2 = self.ser.read(1)
             if not b2:
                 return None
             if b2[0] != self.H1:
                 continue
+
             rest = self.ser.read(self.FRAME_LEN - 2)
             if len(rest) != self.FRAME_LEN - 2:
                 return None
+
             frame = bytes([self.H0, self.H1]) + rest
             if crc8(frame[:-1]) != frame[-1]:
-                self.frames_crc_fail += 1
                 continue
-            self.frames_ok += 1
+
             return frame
 
     def _parse_frame(self, frame: bytes) -> list[tuple[float, float]]:
@@ -94,48 +99,59 @@ class LD06:
             out.append((a, d_m))
         return out
 
-    def read_scan(self, max_frames: int = 60, span_deg: float = 360.0) -> list[tuple[float, float]]:
-        scan: list[tuple[float, float]] = []
-        t0 = time.time()
-        last_ang = None
-        total_span = 0.0
-        min_ang = None
-        max_ang = None
-        wrapped = False
-        use_wrap = span_deg >= 360.0
+    def _sync_to_zero(self, max_frames: int = 120) -> None:
+        sync_window = 5.0
         for _ in range(max_frames):
             fr = self._read_frame()
             if fr is None:
                 break
+
+            start_ang = (int.from_bytes(fr[4:6], "little") / 100.0 + self.offset_deg) % 360.0
+            if start_ang <= sync_window:
+                self.sync_to_zero = False
+                self._sync_frame = fr
+                return
+
+    def read_scan(
+        self,
+        max_frames: int = 60,
+        span_deg: float = 360.0,
+    ) -> list[tuple[float, float]]:
+        scan: list[tuple[float, float]] = []
+        if self.sync_to_zero:
+            self._sync_to_zero()
+
+        last_ang = None
+        total_span = 0.0
+        for _ in range(max_frames):
+            if self._sync_frame is not None:
+                fr, self._sync_frame = self._sync_frame, None
+            else:
+                fr = self._read_frame()
+            if fr is None:
+                break
+
             pts = self._parse_frame(fr)
             for a, d in pts:
-                if last_ang is None:
-                    last_ang = a
-                else:
+                if last_ang is not None:
                     delta = a - last_ang
                     if delta < -180.0:
                         delta += 360.0
-                        if use_wrap:
-                            wrapped = True
                     elif delta > 180.0:
                         delta -= 360.0
-                        if use_wrap:
-                            wrapped = True
                     total_span += delta
-                    last_ang = a
-                min_ang = a if min_ang is None else min(min_ang, a)
-                max_ang = a if max_ang is None else max(max_ang, a)
+                last_ang = a
+
                 scan.append((a, d))
-                if use_wrap and wrapped:
-                    break
                 if abs(total_span) >= span_deg:
                     break
-            if use_wrap and wrapped:
-                break
-            if time.time() - t0 > 0.10 and len(scan) > 150:
-                break
+            else:
+                continue
+            break
+
         scan.sort(key=lambda x: x[0])
         return scan
+
 
 if __name__ == "__main__":
     lidar = LD06("/dev/ttyS0", 230400)
@@ -143,7 +159,7 @@ if __name__ == "__main__":
         while True:
             scan = lidar.read_scan()
             print(scan)
-    except Exception as exc:
-        print(exc)
+    except KeyboardInterrupt:
+        pass
     finally:
         lidar.close()

@@ -1,6 +1,7 @@
 import busio
 import board
 import time
+import numpy as np
 from adafruit_pca9685 import PCA9685
 from ld06 import LD06
 from algo import calculatesteer
@@ -24,6 +25,7 @@ class Config:
     pca9685_address = 0x40
     pca9685_freq_hz = 58
     max_steer_deg = 15
+    steer_sign = -1
 
     control_cycles = 5
 
@@ -65,6 +67,15 @@ def steer_to_us(cfg, s):
     return int(cfg.servo_center_us + s * (cfg.servo_center_us - cfg.servo_left_us))
 
 if __name__ == "__main__":
+    def controlsteer(prev, curr, new):
+        overhit = 1.5
+        if abs(curr - prev) > abs(new - curr):
+            return new
+        else: 
+            luft = 0
+            if np.sign(curr - prev) != np.sign(new - curr):
+                luft = 1
+            return curr + (new - curr) * overhit + np.sign((new - curr)) * luft
     cfg = Config()
     act = Actuators(cfg)
     lidar = LD06("/dev/ttyS0", 230400)
@@ -74,24 +85,19 @@ if __name__ == "__main__":
         act.set_esc_us(1479)
                 
         prevtime = time.time()
-        prevsteer = 0
-        steer = 0
-        intsteer = 0
-        P = 1.2
-        D = 0.2
-        I = 0.001
+        prevsteer = 0.0
+        currsteer = 0.0
+        newsteer = 0.0
         while True:
             scan = lidar.read_scan()
-            prevsteer = steer
-            calculate_steer = calculatesteer(scan)
-            intsteer += calculate_steer - prevsteer
-            steer = (calculate_steer - prevsteer) * D + calculate_steer * P + I * intsteer
-            if abs(steer) >= cfg.max_steer_deg:
-                intsteer = 0.0
-            if time.time() - prevtime > cfg.control_cycles / cfg.pca9685_freq_hz:
-                act.set_esc_us(1460)
-                prevtime = time.time()
-                act.set_servo_deg(-steer)
+            prev_steer = currsteer 
+            currsteer = calculatesteer(scan)
+            newsteer = controlsteer(prevsteer, currsteer, newsteer)
+            now = time.time()
+            dt = cfg.control_cycles / cfg.pca9685_freq_hz
+            if now - prevtime > dt:    
+                prevtime = now
+                act.set_servo_deg(cfg.steer_sign * newsteer)
     except KeyboardInterrupt:
         pass
     finally:
